@@ -1,0 +1,237 @@
+<section class="suggestion-shell">
+  <!-- 导入新见刻本整段建议 -->
+  <div class="surface import-panel">
+    <div class="section-title">
+      <div>
+        <span class="overline">NEW EDITION IMPORT</span>
+        <h2>新见刻本批注 · 待裁决导入</h2>
+      </div>
+      <nz-tag nzColor="orange">建议先入批次，不直接冲字格</nz-tag>
+    </div>
+
+    @if (!draftCells(); as _) {
+      <div class="import-form">
+        <div class="form-row">
+          <label>批次 / 刻本名称</label>
+          <input nz-input [(ngModel)]="draftName" placeholder="如：明活字本校记" />
+          <label>来源</label>
+          <input nz-input [(ngModel)]="draftSource" placeholder="如：国家图书馆藏明活字本" />
+        </div>
+        <label class="block-label">刻本异文（可只录有异文的句子，行数对齐当前正文；平仄由字书自动拟，其余字段提交前可逐字补）</label>
+        <textarea
+          nz-input
+          rows="5"
+          class="edition-textarea"
+          [(ngModel)]="draftText"
+          placeholder="春眠不觉晓，&#10;处处闻啼鸟。&#10;夜来风雨声，&#10;花落知多少。"
+        ></textarea>
+        <label class="block-label">批语说明</label>
+        <input nz-input [(ngModel)]="draftNote" placeholder="本批次的总体说明，会随裁决记录导出" />
+        <div class="form-actions">
+          <button nz-button nzType="primary" (click)="preview()">生成逐字对照建议</button>
+          <span class="hint">生成后仍可逐字增删改，确认提交才建立批次；在此之前字格一个字都不会动。</span>
+        </div>
+      </div>
+    } @else {
+      <!-- 提交前逐字核对草稿 -->
+      <div class="draft-review">
+        <nz-alert
+          nzType="warning"
+          nzShowIcon
+          [nzMessage]="draftConflicts() + ' 处与当前手定平仄冲突，提交后在批次中逐字裁决，冲突默认两版并存'"
+          nzDescription="可以直接修改建议值、删除某条建议，或为某字补加韵组／停顿／依据／批注建议。"
+        ></nz-alert>
+        <div class="draft-list">
+          @for (cell of draftCells(); track cell.id) {
+            <article class="draft-cell">
+              <header>
+                <span class="hanzi-standalone">{{ cellLocation(cell)?.char || cell.anchorChar }}</span>
+                <strong>第 {{ cell.line + 1 }} 句 · 第 {{ cell.position + 1 }} 字</strong>
+              </header>
+              @for (item of cell.items; track item.id) {
+                <div class="draft-item">
+                  <nz-tag>{{ fieldLabel(item.field) }}</nz-tag>
+                  @if (item.field === 'pauseAfter') {
+                    <nz-select class="value-select" [ngModel]="item.value" (ngModelChange)="editDraftValue(cell.id, item.id, $event)">
+                      <nz-option nzValue="true" nzLabel="此字后停顿"></nz-option>
+                      <nz-option nzValue="false" nzLabel="不停顿"></nz-option>
+                    </nz-select>
+                  } @else if (item.field === 'tone') {
+                    <nz-select class="value-select" [ngModel]="item.value" (ngModelChange)="editDraftValue(cell.id, item.id, $event)">
+                      <nz-option nzValue="平" nzLabel="平"></nz-option>
+                      <nz-option nzValue="仄" nzLabel="仄"></nz-option>
+                      <nz-option nzValue="中" nzLabel="中"></nz-option>
+                    </nz-select>
+                  } @else {
+                    <input nz-input class="value-input" [ngModel]="item.value" (ngModelChange)="editDraftValue(cell.id, item.id, $event)" />
+                  }
+                  <em class="current">现定：{{ displayValue(item.field, currentMarkValue(cell, item.field)) }}</em>
+                  <button nz-button nzType="text" nzDanger (click)="removeDraftItem(cell.id, item.id)">删</button>
+                </div>
+              }
+              <div class="draft-add">
+                @for (field of fieldOptions; track field) {
+                  @if (!hasField(cell, field)) {
+                    <button nz-button nzSize="small" (click)="addField(cell.id, field)">＋ {{ fieldLabel(field) }}</button>
+                  }
+                }
+              </div>
+            </article>
+          }
+        </div>
+        <div class="form-actions">
+          <button nz-button (click)="cancelDraft()">放弃草稿</button>
+          <button nz-button nzType="primary" (click)="commitDraft()">提交为待裁决批次</button>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- 批次列表 -->
+  <div class="surface batch-list-panel">
+    <div class="section-title">
+      <div><span class="overline">ADJUDICATION QUEUE</span><h2>待裁决批次</h2></div>
+      <nz-tag>{{ batches().length }} 个批次（当前版本）</nz-tag>
+    </div>
+    @if (batches().length === 0) {
+      <nz-empty class="batch-empty" nzNotFoundContent="当前版本尚无待裁决批次"></nz-empty>
+    }
+    <div class="batch-grid">
+      @for (batch of batches(); track batch.id) {
+        <button
+          class="batch-card"
+          [class.is-active]="activeBatch()?.id === batch.id"
+          [class.is-suspended]="batch.suspended"
+          (click)="selectBatch(batch)"
+        >
+          <div class="batch-card-head">
+            <strong>{{ batch.name }}</strong>
+            @if (batch.suspended) { <nz-tag nzColor="warning">已中断</nz-tag> }
+          </div>
+          <small>{{ batch.source || '未注来源' }}</small>
+          <nz-progress [nzPercent]="progress(batch).percent" [nzStrokeWidth]="6" nzStrokeColor="#b07a2e"></nz-progress>
+          <div class="batch-stat">
+            <span>待裁 {{ progress(batch).pending }}</span>
+            <span>采纳 {{ progress(batch).accepted }}</span>
+            <span>存弃 {{ progress(batch).rejected }}</span>
+            @if (progress(batch).keptBoth > 0) { <span>并存 {{ progress(batch).keptBoth }}</span> }
+            @if (progress(batch).conflicts > 0) { <em class="conflict">冲突 {{ progress(batch).conflicts }}</em> }
+          </div>
+          @if (batch.suspended) { <small class="resume-hint">点击从上次位置继续</small> }
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- 当前批次逐字裁决 -->
+  @if (activeBatch(); as batch) {
+    <div class="surface adjudicate-panel">
+      <div class="section-title adjudicate-head">
+        <div>
+          <span class="overline">CHARACTER BY CHARACTER</span>
+          <h2>逐字裁决 · {{ batch.name }}</h2>
+          <small>{{ batch.source }} · {{ batch.note || '无批语' }}</small>
+        </div>
+        <div class="head-actions">
+          <nz-tag nzColor="processing">{{ batchCellCount(batch) }} 字位未裁完</nz-tag>
+          <button nz-button (click)="store.suspendBatch()">中断（保留位置）</button>
+          <button nz-button nzDanger (click)="store.removeBatch(batch.id)">撤废批次</button>
+        </div>
+      </div>
+
+      <nz-alert
+        class="adjudicate-rule"
+        nzType="info"
+        nzShowIcon
+        nzMessage="裁决规则"
+        nzDescription="采纳才会写入字格并记录来源；手工判定与建议冲突时建议保留两版，字格维持手定；否决只存裁决结论。每裁完一字自动跳到下一处，中断后从上次位置继续。"
+      ></nz-alert>
+
+      <!-- 光标字位优先展示 -->
+      @if (cursorCell(); as cursor) {
+        <div class="cursor-zone" [class.is-hidden-focus]="false">
+          <div class="zone-label"><span class="cursor-dot"></span>当前裁决位置（中断后续裁即回到此处）</div>
+          <ng-container *ngTemplateOutlet="cellTpl; context: { batch: batch, cell: cursor, isCursor: true }"></ng-container>
+        </div>
+      }
+
+      <div class="zone-label">全部字位（按正文顺序）</div>
+      <div class="cell-queue">
+        @for (cell of batch.cells; track cell.id) {
+          <ng-container *ngTemplateOutlet="cellTpl; context: { batch: batch, cell: cell, isCursor: cell.id === batch.cursorId }"></ng-container>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- 逐字对照卡片模板 -->
+  <ng-template #cellTpl let-batch="batch" let-cell="cell" let-isCursor="isCursor">
+    <article class="adjudicate-cell" [class.is-cursor]="isCursor" [class.is-done]="pendingItems(cell).length === 0">
+      <header class="cell-head" (click)="focusCell(cell)">
+        <span class="hanzi-standalone">{{ cellLocation(cell)?.char || cell.anchorChar }}</span>
+        <div>
+          <strong>第 {{ cell.line + 1 }} 句 · 第 {{ cell.position + 1 }} 字</strong>
+          <small>点击定位到字格</small>
+        </div>
+        @if (pendingItems(cell).length === 0) { <nz-tag nzColor="default">本字已裁</nz-tag> }
+      </header>
+
+      <div class="item-list">
+        @for (item of cell.items; track item.id) {
+          <div class="sug-item" [class.status-accepted]="item.status === 'accepted'" [class.status-rejected]="item.status === 'rejected'" [class.status-obsolete]="item.status === 'obsolete'">
+            <nz-tag [nzColor]="item.field === 'tone' ? 'geekblue' : 'default'">{{ fieldLabel(item.field) }}</nz-tag>
+            <div class="compare-values">
+              <div class="value-col manual">
+                <span>手定／字格现值</span>
+                <b>{{ displayValue(item.field, currentMarkValue(cell, item.field)) }}</b>
+              </div>
+              <div class="value-arrow">→</div>
+              <div class="value-col suggest" [class.is-conflict]="isLiveConflict(cell, item) && item.status === 'pending'">
+                <span>刻本建议</span>
+                <b>{{ displayValue(item.field, item.value) }}</b>
+              </div>
+            </div>
+            <div class="item-reason">{{ item.reason }}</div>
+            <div class="item-actions">
+              @switch (item.status) {
+                @case ('pending') {
+                  @if (isLiveConflict(cell, item)) {
+                    <nz-tag nzColor="error">与手定冲突</nz-tag>
+                    <button nz-button nzSize="small" (click)="accept(batch, cell, item)">采纳（覆盖并留源）</button>
+                    <button nz-button nzSize="small" (click)="keepBoth(cell)">保留两版</button>
+                    <button nz-button nzSize="small" (click)="reject(batch, cell, item)">否决</button>
+                  } @else {
+                    <button nz-button nzSize="small" nzType="primary" (click)="accept(batch, cell, item)">采纳</button>
+                    <button nz-button nzSize="small" (click)="reject(batch, cell, item)">否决</button>
+                  }
+                }
+                @case ('accepted') {
+                  <nz-tag nzColor="green">已采纳写入</nz-tag>
+                  <button nz-button nzSize="small" nzType="text" (click)="reopen(batch, item)">撤回裁决</button>
+                }
+                @case ('rejected') {
+                  <nz-tag nzColor="default">已存弃</nz-tag>
+                  <button nz-button nzSize="small" nzType="text" (click)="reopen(batch, item)">撤回裁决</button>
+                }
+                @case ('kept-both') {
+                  <nz-tag nzColor="orange">两版并存 · 字格仍手定</nz-tag>
+                  <button nz-button nzSize="small" nzType="text" (click)="reopen(batch, item)">撤回再裁</button>
+                }
+                @case ('obsolete') {
+                  <nz-tag nzColor="warning">正文已改 · 自动作废</nz-tag>
+                }
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      @if (pendingItems(cell).length > 1) {
+        <footer class="cell-bulk">
+          <button nz-button nzSize="small" (click)="acceptAll(batch, cell)">本字全部采纳</button>
+          <button nz-button nzSize="small" (click)="rejectAll(batch, cell)">本字全部否决</button>
+        </footer>
+      }
+    </article>
+  </ng-template>
+</section>

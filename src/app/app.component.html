@@ -41,6 +41,7 @@
     <div class="issue-pills">
       <nz-tag nzColor="error">{{ totalErrors }} 处出律</nz-tag>
       <nz-tag nzColor="warning">{{ totalWarnings }} 处待核</nz-tag>
+      <nz-tag nzColor="orange">{{ totalPending }} 条待裁</nz-tag>
       <nz-tag>{{ store.differences().length }} 处异文</nz-tag>
     </div>
   </section>
@@ -106,6 +107,7 @@
                       [class.is-variant]="cell.status === 'variant'"
                       [class.is-error]="cell.status === 'error'"
                       [class.is-unknown]="cell.status === 'unknown'"
+                      [class.has-pending]="cell.pendingSuggestions.length > 0"
                       nz-tooltip
                       [nzTooltipTitle]="cell.message"
                       (click)="store.selectCell(line.index, cell.position)"
@@ -115,7 +117,9 @@
                       <span class="mark-row">
                         @if (cell.mark.rhyme) { <em>{{ cell.mark.rhyme }}</em> }
                         @if (cell.mark.pauseAfter) { <i>顿</i> }
+                        @if (cell.mark.origin === 'suggestion') { <i class="origin-sug" title="采纳自版本建议">采</i> }
                       </span>
+                      @if (cell.pendingSuggestions.length > 0) { <b class="pending-dot">{{ cell.pendingSuggestions.length }}</b> }
                     </button>
                   }
                 </div>
@@ -176,6 +180,36 @@
               [ngModel]="cell.mark.note"
               (ngModelChange)="store.setMark({ note: $event })"
             ></textarea>
+
+            @if (cell.pendingSuggestions.length > 0) {
+              <div class="pending-box">
+                <label class="field-label">本字待裁决建议（{{ cell.pendingSuggestions.length }}）</label>
+                @for (entry of cell.pendingSuggestions; track entry.item.id) {
+                  <div class="pending-line" [class.is-conflict]="store.isConflict(entry.item, cell.mark)">
+                    <nz-tag>{{ entry.batchName }}</nz-tag>
+                    <b>{{ entry.item.field }}</b>
+                    <span>建议「{{ entry.item.value === 'true' ? '停顿' : entry.item.value === 'false' ? '不停顿' : entry.item.value || '空' }}」</span>
+                  </div>
+                }
+                <small>建议不会覆盖手定，请在「版本裁决」页处理；两版可并存。</small>
+              </div>
+            }
+
+            @if (cell.mark.history.length > 0) {
+              <div class="history-box">
+                <label class="field-label">判定来源链（{{ cell.mark.history.length }}）</label>
+                @for (record of cell.mark.history.slice().reverse(); track record.decidedAt + record.origin) {
+                  <div class="history-line" [class.is-suggestion]="record.origin === 'suggestion'">
+                    <nz-tag [nzColor]="record.origin === 'suggestion' ? 'green' : 'default'">
+                      {{ record.origin === 'suggestion' ? '采纳建议' : '手定' }}
+                    </nz-tag>
+                    <span>{{ record.source || '手定稿' }} · {{ record.basis || '—' }}</span>
+                    <small>{{ record.decidedAt | date: 'MM-dd HH:mm' }}</small>
+                  </div>
+                }
+              </div>
+            }
+
             <nz-divider></nz-divider>
             <button nz-button nzBlock (click)="store.addAntithesis()">将此句加入对仗关系</button>
           } @else {
@@ -218,14 +252,22 @@
           }
           <div class="pair-list">
             @for (pair of store.activeVersion().antithesisPairs; track pair.id) {
-              <article class="pair-card">
+              <article class="pair-card" [class.is-review]="pair.review === 'pending'">
                 <div class="pair-head">
                   <strong>第 {{ pair.leftLine + 1 }} 句 ↔ 第 {{ pair.rightLine + 1 }} 句</strong>
+                  @if (pair.review === 'pending') {
+                    <nz-tag nzColor="warning">受正文改动影响 · 待复核</nz-tag>
+                  } @else {
+                    <nz-tag nzColor="green">已确认</nz-tag>
+                  }
                   <button nz-button nzType="text" nzDanger (click)="store.removeAntithesis(pair.id)">移除</button>
                 </div>
                 <p>{{ store.lines()[pair.leftLine] }}</p>
                 <p>{{ store.lines()[pair.rightLine] }}</p>
                 <input nz-input [ngModel]="pair.note" (ngModelChange)="store.updateAntithesis(pair.id, $event)" />
+                @if (pair.review === 'pending') {
+                  <button class="confirm-pair" nz-button nzSize="small" nzType="primary" (click)="store.confirmAntithesis(pair.id)">复核无误，确认对仗</button>
+                }
               </article>
             }
           </div>
@@ -267,9 +309,11 @@
                 [class.is-current]="item.index === store.currentDiffIndex()"
                 [class.has-left]="!item.left"
                 [class.has-right]="!item.right"
+                [class.has-pending]="item.hasPending"
               >
                 <i>{{ item.left || '□' }}</i>
                 <b>{{ item.right || '□' }}</b>
+                @if (item.hasPending) { <em class="diff-pending">裁</em> }
               </span>
             }
           </div>
@@ -280,6 +324,10 @@
           <nz-empty nzNotFoundContent="请选择一份异文底本"></nz-empty>
         }
       </section>
+    </nz-tab>
+
+    <nz-tab nzTitle="版本裁决">
+      <app-suggestion-panel></app-suggestion-panel>
     </nz-tab>
 
     <nz-tab nzTitle="版本与导出">
@@ -304,13 +352,61 @@
         <aside class="surface export-panel">
           <span class="overline">PROOFREAD EXPORT</span>
           <h2>导出校对稿</h2>
-          <p>包含逐字平仄、韵组、判断依据、出律提示与对仗记录。</p>
+          <p>包含逐字平仄、韵组、判断依据与来源、裁决进度、失效标注、出律提示与对仗记录。</p>
           <button nz-button nzType="primary" nzSize="large" nzBlock (click)="store.downloadProofreadCopy()">导出 Markdown 校对稿</button>
           <nz-divider></nz-divider>
           <label class="field-label">当前底本说明</label>
           <input nz-input [ngModel]="store.activeVersion().source" (ngModelChange)="updateVersionSource($event)" />
         </aside>
       </div>
+
+      @if (activeOrphans.length > 0) {
+        <section class="surface orphan-panel">
+          <div class="section-title">
+            <div><span class="overline">INVALIDATED MARKS</span><h2>失效标注 · 待重算重挂</h2></div>
+            <nz-tag nzColor="warning">{{ activeOrphans.length }} 条</nz-tag>
+          </div>
+          <nz-alert
+            class="orphan-alert"
+            nzType="warning"
+            nzShowIcon
+            nzMessage="正文增删后，旧标注已随原字核对；对不上原字的在此摘出，不会串到别字"
+            nzDescription="只有目标字位仍是原字时才允许重挂；改字后字音需重新判定，亦可直接弃置。"
+          ></nz-alert>
+          <div class="orphan-grid">
+            @for (orphan of activeOrphans; track orphan.id) {
+              <article class="orphan-card">
+                <div class="orphan-head">
+                  <span class="hanzi-standalone">{{ orphan.oldChar }}</span>
+                  <div>
+                    <strong>原第 {{ orphan.oldLine + 1 }} 句第 {{ orphan.oldPosition + 1 }} 字</strong>
+                    <small>{{ orphan.reason === 'character-removed' ? '该字已删除' : '该位已改字' }} · {{ orphan.detachedAt | date: 'MM-dd HH:mm' }}</small>
+                  </div>
+                </div>
+                <div class="orphan-marks">
+                  <nz-tag>平仄 {{ orphan.mark.tone }}</nz-tag>
+                  @if (orphan.mark.rhyme) { <nz-tag>韵 {{ orphan.mark.rhyme }}</nz-tag> }
+                  @if (orphan.mark.pauseAfter) { <nz-tag>顿</nz-tag> }
+                  @if (orphan.mark.basis) { <small>依据：{{ orphan.mark.basis }}</small> }
+                </div>
+                <div class="orphan-actions">
+                  <nz-select
+                    class="reattach-select"
+                    nzPlaceHolder="选同字位重挂（仅列原字）"
+                    (ngModelChange)="onReattach(orphan.id, $event)"
+                    [ngModel]="null"
+                  >
+                    @for (target of reattachTargets(orphan.id); track target.line + '-' + target.position) {
+                      <nz-option [nzValue]="target" [nzLabel]="'第 ' + (target.line + 1) + ' 句第 ' + (target.position + 1) + ' 字（' + target.char + '）'"></nz-option>
+                    }
+                  </nz-select>
+                  <button nz-button nzSize="small" nzDanger (click)="store.discardOrphan(orphan.id)">弃置</button>
+                </div>
+              </article>
+            }
+          </div>
+        </section>
+      }
     </nz-tab>
   </nz-tabset>
 

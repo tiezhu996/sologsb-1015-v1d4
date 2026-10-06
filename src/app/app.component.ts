@@ -14,6 +14,7 @@ import { NzTabsModule } from 'ng-zorro-antd/tabs';
 import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import { METER_TEMPLATES, PoetryStoreService } from './services/poetry-store.service';
+import { SuggestionPanelComponent } from './components/suggestion-panel.component';
 
 @Component({
   selector: 'app-root',
@@ -32,6 +33,7 @@ import { METER_TEMPLATES, PoetryStoreService } from './services/poetry-store.ser
     NzTabsModule,
     NzTagModule,
     NzToolTipModule,
+    SuggestionPanelComponent,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.less',
@@ -56,6 +58,32 @@ export class AppComponent {
     return Math.round((cells.filter((cell) => cell.actual !== '?').length / cells.length) * 100);
   }
 
+  /** 全工作区待裁决建议数（字格、对照、导出共用此进度） */
+  get totalPending(): number {
+    return this.store
+      .workspace()
+      .batches.filter((batch) => batch.versionId === this.store.activeVersion().id)
+      .reduce((sum, batch) => sum + this.store.batchProgress(batch.id).pending, 0);
+  }
+
+  get activeOrphans() {
+    const versionId = this.store.activeVersion().id;
+    return this.store.workspace().orphans.filter((orphan) => orphan.fromVersionId === versionId);
+  }
+
+  /** 失效标注可重挂的候选字位（必须还是原字，防止串到别字） */
+  reattachTargets(orphanId: string): { line: number; position: number; char: string }[] {
+    const orphan = this.store.workspace().orphans.find((item) => item.id === orphanId);
+    if (!orphan) return [];
+    const targets: { line: number; position: number; char: string }[] = [];
+    this.store.analysis().forEach((line) => {
+      line.cells.forEach((cell) => {
+        if (cell.char === orphan.oldChar) targets.push({ line: line.index, position: cell.position, char: cell.char });
+      });
+    });
+    return targets;
+  }
+
   setTone(tone: '平' | '仄' | '中' | '?'): void {
     this.store.setMark({ tone });
   }
@@ -66,6 +94,10 @@ export class AppComponent {
 
   updateVersionSource(source: string): void {
     this.store.updateVersionSource(source);
+  }
+
+  onReattach(orphanId: string, target: { line: number; position: number } | null): void {
+    if (target) this.store.reattachOrphan(orphanId, target.line, target.position);
   }
 
   trackTemplate(index: number, item: (typeof METER_TEMPLATES)[number]): string {
