@@ -7,6 +7,8 @@ export interface CharacterMark {
   pauseAfter: boolean;
   basis: string;
   note: string;
+  /** 标注来源：手工校定或采纳的建议批次名 */
+  origin: string;
 }
 
 export interface PoemVersion {
@@ -15,8 +17,21 @@ export interface PoemVersion {
   source: string;
   createdAt: string;
   text: string;
+  /** 每句每个计律字的稳定字符 ID，marks 以其为键，保证正文增删后标注跟着原字走 */
+  charIds: string[][];
   marks: Record<string, CharacterMark>;
+  /** 正文增删后未能对应回原字的旧标注，先失效待重算 */
+  invalidated: InvalidatedMark[];
   antithesisPairs: AntithesisPair[];
+}
+
+export interface InvalidatedMark {
+  id: string;
+  char: string;
+  line: number;
+  position: number;
+  mark: CharacterMark;
+  reason: string;
 }
 
 export interface AntithesisPair {
@@ -24,6 +39,36 @@ export interface AntithesisPair {
   leftLine: number;
   rightLine: number;
   note: string;
+  /** 正文增删波及到相关句时转为 review，待人工复核 */
+  status: 'active' | 'review';
+}
+
+export type SuggestionStatus = 'pending' | 'adopted' | 'rejected' | 'matched' | 'obsolete';
+
+export interface SuggestionItem {
+  id: string;
+  /** 目标字符的稳定 ID，正文再改也能找回原字 */
+  charId: string;
+  char: string;
+  line: number;
+  position: number;
+  suggestedTone: MarkTone | '';
+  suggestedRhyme: string;
+  /** 导入时的手定快照，与建议冲突时两版并存 */
+  manual: CharacterMark;
+  conflict: boolean;
+  status: SuggestionStatus;
+}
+
+export interface SuggestionBatch {
+  id: string;
+  name: string;
+  source: string;
+  createdAt: string;
+  versionId: string;
+  items: SuggestionItem[];
+  /** 裁决游标：中断后从上次位置继续 */
+  cursor: number;
 }
 
 export interface PoemWorkspace {
@@ -32,6 +77,7 @@ export interface PoemWorkspace {
   templateId: string;
   versions: PoemVersion[];
   activeVersionId: string;
+  batches: SuggestionBatch[];
   updatedAt: string;
 }
 
@@ -77,4 +123,14 @@ export interface CharDiff {
   left: string;
   right: string;
   changed: boolean;
+}
+
+export interface AdjudicationProgress {
+  total: number;
+  decided: number;
+  adopted: number;
+  rejected: number;
+  matched: number;
+  pending: number;
+  percent: number;
 }

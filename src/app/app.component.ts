@@ -41,6 +41,11 @@ export class AppComponent {
   readonly store = inject(PoetryStoreService);
   readonly templates = METER_TEMPLATES;
   readonly selectedCell = computed(() => this.store.selectedCell());
+  readonly progress = computed(() => this.store.adjudicationProgress());
+
+  batchName = '';
+  batchSource = '';
+  batchInput = '';
 
   get totalErrors(): number {
     return this.store.issues().filter((issue) => issue.level === 'error').length;
@@ -66,6 +71,16 @@ export class AppComponent {
 
   updateVersionSource(source: string): void {
     this.store.updateVersionSource(source);
+  }
+
+  createBatch(): void {
+    this.store.createSuggestionBatch(this.batchName, this.batchSource, this.batchInput);
+    this.batchInput = '';
+  }
+
+  itemStatusLabel(status: string): string {
+    const labels: Record<string, string> = { pending: '待裁决', adopted: '已采纳', rejected: '保留手定', matched: '一致', obsolete: '已失效' };
+    return labels[status] ?? status;
   }
 
   trackTemplate(index: number, item: (typeof METER_TEMPLATES)[number]): string {

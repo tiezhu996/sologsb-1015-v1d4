@@ -110,6 +110,7 @@ kbd { display: inline-grid; min-width: 21px; height: 21px; padding: 0 5px; place
 .legend-dot.variant { background: #ca9438; }
 .legend-dot.error { background: #bd4a42; }
 .legend-dot.unknown { background: #aaa69c; }
+.legend-dot.suggest { background: #6a4d8a; }
 .meter-lines { padding: 10px; }
 .meter-line {
   position: relative;
@@ -145,6 +146,22 @@ kbd { display: inline-grid; min-width: 21px; height: 21px; padding: 0 5px; place
 .meter-character.is-variant { background: #fbf4e3; border-color: #e0c88f; }
 .meter-character.is-error { background: #faecea; border-color: #daa29e; }
 .meter-character.is-unknown { background: #f1f0ec; border-color: #d3d0c8; }
+.meter-character.has-suggestion { border-style: dashed; border-color: #9b7fc0; }
+.suggest-badge {
+  position: absolute;
+  top: -7px;
+  right: -6px;
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #6a4d8a;
+  font-size: 9px;
+  font-style: normal;
+  box-shadow: 0 2px 6px rgba(80, 55, 115, .35);
+}
 .expected { display: block; color: #999285; font: 9px/1.2 "Songti SC", serif; }
 .hanzi { display: block; margin: 6px 0 4px; font: 27px/1 "Songti SC", "STSong", serif; }
 .mark-row { display: flex; height: 14px; align-items: center; justify-content: center; gap: 3px; }
@@ -192,6 +209,61 @@ kbd { display: inline-grid; min-width: 21px; height: 21px; padding: 0 5px; place
 .pair-card { padding: 11px; border: 1px solid #e4dfd4; border-radius: 9px; background: #fbfaf6; }
 .pair-head { display: flex; align-items: center; justify-content: space-between; }
 .pair-card p { margin: 8px 0; font: 15px/1.8 "Songti SC", serif; }
+.pair-card.needs-review { border-color: #d8b45f; background: #fdf8ec; }
+
+.batch-layout { display: grid; grid-template-columns: 330px minmax(560px, 1fr); gap: 12px; align-items: start; }
+.batch-form-panel { padding-bottom: 14px; }
+.batch-form { padding: 0 14px; }
+.form-hint { margin: 8px 0 12px; color: #8d887c; font-size: 10px; line-height: 1.6; }
+.batch-list { padding: 0 14px; display: grid; gap: 9px; }
+.batch-card { padding: 11px; border: 1px solid #e2ddd2; border-radius: 9px; background: #fbfaf6; }
+.batch-card.is-active { border-color: #6a4d8a; box-shadow: 0 0 0 2px rgba(106, 77, 138, .12); }
+.batch-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.batch-head strong { font-size: 12px; }
+.batch-card small { display: block; margin: 4px 0 8px; color: #918b80; font-size: 9px; }
+.batch-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+.adjudication-panel { min-width: 0; padding-bottom: 14px; }
+.verdict-bench { padding: 16px; }
+.verdict-char { display: flex; align-items: center; gap: 12px; padding: 11px; border-radius: 9px; background: #f3f1ec; }
+.verdict-char strong { font-size: 12px; }
+.verdict-char p { margin-top: 4px; color: #747a73; font-size: 10px; }
+.verdict-columns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+.verdict-col { padding: 12px; border: 1px solid #e2ddd2; border-radius: 9px; background: #fbfaf6; }
+.verdict-col.suggested { border-color: #b9a3d6; background: #f7f3fc; }
+.verdict-col strong, .verdict-col small { display: block; }
+.verdict-col strong { margin: 5px 0; font-size: 15px; }
+.verdict-col small { color: #8d887c; font-size: 9px; line-height: 1.7; }
+.verdict-actions { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+.item-strip { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px; }
+.item-chip {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d9d3c6;
+  border-radius: 7px;
+  color: #4a4d47;
+  background: #fbfaf6;
+  font: 15px/1 "Songti SC", serif;
+  cursor: pointer;
+}
+.item-chip.is-current { border-color: #6a4d8a; box-shadow: 0 0 0 2px rgba(106, 77, 138, .18); }
+.item-chip.is-conflict { border-color: #bd4a42; color: #a23e36; }
+.item-chip.is-done { color: #9a958a; background: #f1efe9; }
+
+.stale-panel { grid-column: 1 / -1; padding-bottom: 12px; }
+.stale-list { padding: 10px; display: grid; gap: 8px; }
+.stale-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #e4d9c2; border-radius: 9px; background: #fdf9ef; }
+.stale-char { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 8px; color: #7b581d; background: #f3e8cd; font: 20px/1 "Songti SC", serif; }
+.stale-card strong, .stale-card small { display: block; }
+.stale-card strong { font-size: 12px; }
+.stale-card small { margin-top: 2px; color: #8d887c; font-size: 9px; }
+.stale-actions { margin-left: auto; display: flex; gap: 6px; }
+
+.export-progress { margin-bottom: 16px; padding: 11px; border: 1px solid #ddd3e8; border-radius: 9px; background: #f8f5fc; }
+.export-progress span { display: block; margin-bottom: 6px; color: #5f5480; font-size: 11px; font-weight: 700; }
+.export-progress small { display: block; margin-top: 4px; color: #8d887c; font-size: 9px; }
 
 .compare-panel { padding: 16px; }
 .compare-toolbar { display: flex; align-items: center; gap: 9px; }
@@ -276,6 +348,8 @@ kbd { display: inline-grid; min-width: 21px; height: 21px; padding: 0 5px; place
   .meter-panel { order: 1; overflow-x: auto; }
   .inspector-panel { order: 3; grid-template-columns: 1fr; }
   .audit-layout, .version-layout { grid-template-columns: 1fr; }
+  .batch-layout { grid-template-columns: 1fr; }
+  .verdict-columns { grid-template-columns: 1fr; }
   .version-grid { grid-template-columns: repeat(2, 1fr); }
   .compare-toolbar { flex-wrap: wrap; }
 }

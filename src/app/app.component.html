@@ -83,11 +83,15 @@
               <span class="overline">METER GRID</span>
               <h2>逐字格律标注</h2>
             </div>
+            @if (progress().total > 0) {
+              <nz-tag nzColor="purple">裁决 {{ progress().decided }}/{{ progress().total }}</nz-tag>
+            }
             <div class="legend">
               <span class="legend-dot correct"></span>合律
               <span class="legend-dot variant"></span>可接受
               <span class="legend-dot error"></span>出律
               <span class="legend-dot unknown"></span>待标
+              <span class="legend-dot suggest"></span>有建议
             </div>
           </div>
           <div class="meter-lines">
@@ -106,10 +110,12 @@
                       [class.is-variant]="cell.status === 'variant'"
                       [class.is-error]="cell.status === 'error'"
                       [class.is-unknown]="cell.status === 'unknown'"
+                      [class.has-suggestion]="store.pendingSuggestionCells().has(line.index + ':' + cell.position)"
                       nz-tooltip
                       [nzTooltipTitle]="cell.message"
                       (click)="store.selectCell(line.index, cell.position)"
                     >
+                      @if (store.pendingSuggestionCells().has(line.index + ':' + cell.position)) { <span class="suggest-badge">议</span> }
                       <span class="expected">{{ cell.expected }}／{{ cell.actual }}</span>
                       <span class="hanzi">{{ cell.char }}</span>
                       <span class="mark-row">
@@ -185,6 +191,132 @@
       </div>
     </nz-tab>
 
+    <nz-tab nzTitle="刻本建议">
+      <div class="batch-layout">
+        <aside class="surface batch-form-panel">
+          <div class="section-title compact">
+            <div><span class="overline">NEW EDITION</span><h2>登记建议批次</h2></div>
+          </div>
+          <div class="batch-form">
+            <label class="field-label">批次名称</label>
+            <input nz-input placeholder="如：新见明刻本批注" [(ngModel)]="batchName" />
+            <label class="field-label">版本来源</label>
+            <input nz-input placeholder="如：明万历刻本" [(ngModel)]="batchSource" />
+            <label class="field-label">整段建议（每行对应一句，行尾可附「韵:X」）</label>
+            <textarea
+              nz-input
+              rows="6"
+              placeholder="仄仄平平仄&#10;平平仄仄平 韵:A&#10;平平平仄仄&#10;仄仄仄平平 韵:A"
+              [(ngModel)]="batchInput"
+            ></textarea>
+            <p class="form-hint">建议只进入待裁决批次，逐字对照前不会改动任何字格标注。</p>
+            <button nz-button nzType="primary" nzBlock [disabled]="!batchInput.trim()" (click)="createBatch()">生成待裁决批次</button>
+          </div>
+          <nz-divider></nz-divider>
+          <div class="batch-list">
+            @for (batch of store.activeBatches(); track batch.id) {
+              <article class="batch-card" [class.is-active]="batch.id === store.activeBatchId()">
+                <div class="batch-head">
+                  <strong>{{ batch.name }}</strong>
+                  <nz-tag [nzColor]="store.batchProgress(batch).pending ? 'warning' : 'success'">
+                    {{ store.batchProgress(batch).pending ? '裁决中' : '已裁毕' }}
+                  </nz-tag>
+                </div>
+                <small>{{ batch.source || '未注明来源' }} · {{ batch.createdAt | date: 'MM-dd HH:mm' }}</small>
+                <nz-progress
+                  [nzPercent]="store.batchProgress(batch).percent"
+                  nzStrokeColor="#6a4d8a"
+                  [nzStrokeWidth]="6"
+                ></nz-progress>
+                <div class="batch-actions">
+                  <button nz-button nzSize="small" nzType="primary" (click)="store.resumeBatch(batch.id)">继续裁决</button>
+                  <button nz-button nzSize="small" nzDanger nzType="text" (click)="store.removeBatch(batch.id)">删除</button>
+                </div>
+              </article>
+            } @empty {
+              <nz-empty nzNotFoundContent="尚无建议批次"></nz-empty>
+            }
+          </div>
+        </aside>
+
+        <main class="surface adjudication-panel">
+          @if (store.activeBatch(); as batch) {
+            <div class="section-title">
+              <div>
+                <span class="overline">ADJUDICATION</span>
+                <h2>{{ batch.name }} · 逐字裁决</h2>
+              </div>
+              <nz-tag nzColor="purple">已裁决 {{ store.batchProgress(batch).decided }}/{{ store.batchProgress(batch).total }}</nz-tag>
+            </div>
+            @if (store.currentBatchItem(); as item) {
+              <div class="verdict-bench">
+                <div class="verdict-char">
+                  <span class="large-hanzi">{{ item.char }}</span>
+                  <div>
+                    <strong>第 {{ item.line + 1 }} 句 · 第 {{ item.position + 1 }} 字</strong>
+                    <p>
+                      {{ itemStatusLabel(item.status) }}
+                      @if (item.conflict) { <nz-tag nzColor="error">手定与建议冲突，两版并存</nz-tag> }
+                    </p>
+                  </div>
+                </div>
+                <div class="verdict-columns">
+                  <div class="verdict-col">
+                    <span class="overline">当前手定（实时）</span>
+                    @if (store.liveMarkOf(item); as live) {
+                      <strong>{{ live.tone === '?' ? '未标' : live.tone }}{{ live.rhyme ? ' · 韵' + live.rhyme : '' }}</strong>
+                      <small>{{ live.basis || '无依据记录' }}</small>
+                      <small>来源：{{ live.origin || '未记录' }}</small>
+                    } @else {
+                      <strong>原字已删</strong>
+                      <small>该建议已失效，可在批次中略过</small>
+                    }
+                  </div>
+                  <div class="verdict-col">
+                    <span class="overline">导入时手定快照</span>
+                    <strong>{{ item.manual.tone === '?' ? '未标' : item.manual.tone }}{{ item.manual.rhyme ? ' · 韵' + item.manual.rhyme : '' }}</strong>
+                    <small>{{ item.manual.basis || '无依据记录' }}</small>
+                    <small>冲突时与建议两版并存</small>
+                  </div>
+                  <div class="verdict-col suggested">
+                    <span class="overline">刻本建议</span>
+                    <strong>{{ item.suggestedTone || '保持' }}{{ item.suggestedRhyme ? ' · 韵' + item.suggestedRhyme : '' }}</strong>
+                    <small>{{ batch.source || batch.name }}</small>
+                    <small>采纳后方写入字格并记来源</small>
+                  </div>
+                </div>
+                <div class="verdict-actions">
+                  <button nz-button (click)="store.stepBatchItem(-1)">上一条</button>
+                  <button nz-button nzType="primary" [disabled]="item.status !== 'pending'" (click)="store.adoptSuggestion(item.id)">采纳建议</button>
+                  <button nz-button nzType="default" [disabled]="item.status !== 'pending'" (click)="store.rejectSuggestion(item.id)">保留手定</button>
+                  <button nz-button (click)="store.stepBatchItem(1)">下一条</button>
+                </div>
+              </div>
+              <div class="item-strip">
+                @for (entry of batch.items; track entry.id; let i = $index) {
+                  <button
+                    class="item-chip"
+                    [class.is-current]="i === batch.cursor"
+                    [class.is-conflict]="entry.conflict && entry.status === 'pending'"
+                    [class.is-done]="entry.status !== 'pending'"
+                    nz-tooltip
+                    [nzTooltipTitle]="'第 ' + (entry.line + 1) + ' 句第 ' + (entry.position + 1) + ' 字 · ' + itemStatusLabel(entry.status)"
+                    (click)="store.jumpToBatchItem(i)"
+                  >
+                    {{ entry.char }}
+                  </button>
+                }
+              </div>
+            } @else {
+              <nz-empty nzNotFoundContent="该批次没有建议条目"></nz-empty>
+            }
+          } @else {
+            <nz-empty nzNotFoundContent="请选择或登记一个建议批次"></nz-empty>
+          }
+        </main>
+      </div>
+    </nz-tab>
+
     <nz-tab nzTitle="格律与对仗">
       <div class="audit-layout">
         <section class="surface audit-main">
@@ -218,10 +350,16 @@
           }
           <div class="pair-list">
             @for (pair of store.activeVersion().antithesisPairs; track pair.id) {
-              <article class="pair-card">
+              <article class="pair-card" [class.needs-review]="pair.status === 'review'">
                 <div class="pair-head">
                   <strong>第 {{ pair.leftLine + 1 }} 句 ↔ 第 {{ pair.rightLine + 1 }} 句</strong>
-                  <button nz-button nzType="text" nzDanger (click)="store.removeAntithesis(pair.id)">移除</button>
+                  <span>
+                    @if (pair.status === 'review') {
+                      <nz-tag nzColor="warning">待复核</nz-tag>
+                      <button nz-button nzType="text" (click)="store.confirmAntithesis(pair.id)">复核通过</button>
+                    }
+                    <button nz-button nzType="text" nzDanger (click)="store.removeAntithesis(pair.id)">移除</button>
+                  </span>
                 </div>
                 <p>{{ store.lines()[pair.leftLine] }}</p>
                 <p>{{ store.lines()[pair.rightLine] }}</p>
@@ -229,6 +367,32 @@
               </article>
             }
           </div>
+        </section>
+        <section class="surface stale-panel">
+          <div class="section-title">
+            <div><span class="overline">ORPHANED MARKS</span><h2>失效标注 · 待重算</h2></div>
+            <nz-tag nzColor="warning">{{ store.activeVersion().invalidated.length }} 条</nz-tag>
+          </div>
+          @if (store.activeVersion().invalidated.length === 0) {
+            <nz-empty nzNotFoundContent="正文增删后没有失配的旧标注"></nz-empty>
+          } @else {
+            <div class="stale-list">
+              @for (stale of store.activeVersion().invalidated; track stale.id) {
+                <article class="stale-card">
+                  <span class="stale-char">{{ stale.char || '？' }}</span>
+                  <div>
+                    <strong>原标 {{ stale.mark.tone }}{{ stale.mark.rhyme ? ' · 韵' + stale.mark.rhyme : '' }}</strong>
+                    <small>原第 {{ stale.line + 1 }} 句第 {{ stale.position + 1 }} 字 · 来源：{{ stale.mark.origin || '未记录' }}</small>
+                    <small>{{ stale.reason }}</small>
+                  </div>
+                  <span class="stale-actions">
+                    <button nz-button nzSize="small" nzType="primary" nz-tooltip nzTooltipTitle="套用到字格当前选中字" (click)="store.reapplyInvalidated(stale.id)">套用到选中字</button>
+                    <button nz-button nzSize="small" nzType="text" nzDanger (click)="store.discardInvalidated(stale.id)">清除</button>
+                  </span>
+                </article>
+              }
+            </div>
+          }
         </section>
       </div>
     </nz-tab>
@@ -253,6 +417,9 @@
           <button nz-button (click)="store.previousDifference()">上一处异文</button>
           <button nz-button nzType="primary" (click)="store.nextDifference()">下一处异文</button>
           <nz-tag nzColor="error">{{ store.differences().length }} 处差异</nz-tag>
+          @if (progress().total > 0) {
+            <nz-tag nzColor="purple">裁决 {{ progress().decided }}/{{ progress().total }}</nz-tag>
+          }
         </div>
         @if (store.baselineVersion(); as baseline) {
           <div class="compare-headings">
@@ -304,7 +471,18 @@
         <aside class="surface export-panel">
           <span class="overline">PROOFREAD EXPORT</span>
           <h2>导出校对稿</h2>
-          <p>包含逐字平仄、韵组、判断依据、出律提示与对仗记录。</p>
+          <p>包含逐字平仄、韵组、判断依据、出律提示、对仗记录与刻本建议裁决进度。</p>
+          @if (progress().total > 0) {
+            <div class="export-progress">
+              <span>刻本建议裁决</span>
+              <nz-progress
+                [nzPercent]="progress().percent"
+                nzStrokeColor="#6a4d8a"
+                [nzStrokeWidth]="6"
+              ></nz-progress>
+              <small>已裁决 {{ progress().decided }}/{{ progress().total }} · 采纳 {{ progress().adopted }} · 保留手定 {{ progress().rejected }}</small>
+            </div>
+          }
           <button nz-button nzType="primary" nzSize="large" nzBlock (click)="store.downloadProofreadCopy()">导出 Markdown 校对稿</button>
           <nz-divider></nz-divider>
           <label class="field-label">当前底本说明</label>
